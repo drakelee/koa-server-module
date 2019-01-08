@@ -1,28 +1,42 @@
 const Koa = require('koa')
+const {ApolloServer} = require('apollo-server-koa')
+const { GraphQLSchema, GraphQLObjectType } = require('graphql');
+
 const loggerMiddleware = require('./middleware/logger')
 const responseTimeMiddleware = require('./middleware/responseTime')
 const logger = require('./logger')
-const routeLoader = require('./service/RouteLoader')
+const schemaLoader = require('./service/SchemaLoader')
 
 class Server {
-    constructor(routeDir) {
+    constructor(schemaDir) {
+        this.schemas = []
+        this.loadSchemas(schemaDir)
+
+        const schema = new GraphQLSchema({
+            query: new GraphQLObjectType({
+                name: 'Query',
+                fields: () => ({
+                    ...this.schemas
+                })
+            })
+        })
+
+        const server = new ApolloServer({schema})
+
         this.app = new Koa()
         //TODO: configurable middleware
         this.app
             .use(loggerMiddleware)
             .use(responseTimeMiddleware)
-
-        this.loadRoutes(routeDir)
+        server.applyMiddleware({app: this.app})
     }
 
-    addRoute(route) {
-        this.app
-            .use(route.routes())
-            .use(route.allowedMethods())
+    addSchema(schema) {
+        this.schemas = {...this.schemas, ...schema}
     }
 
-    loadRoutes(routeDir) {
-        routeLoader.loadRoutes(routeDir, this.addRoute.bind(this))
+    loadSchemas(schemaDir) {
+        schemaLoader.loadSchemas(schemaDir, this.addSchema.bind(this))
     }
 
     run() {
